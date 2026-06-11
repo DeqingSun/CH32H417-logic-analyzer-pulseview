@@ -9,7 +9,13 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Dependencies
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLIB REQUIRED glib-2.0>=2.32.0)
-pkg_check_modules(PYTHON3 REQUIRED python3>=3.2)
+
+# python3.pc is for C extensions (no libpython link on Homebrew).
+# libsigrokdecode embeds Python, so prefer python3-embed.
+pkg_check_modules(PYTHON3 python3-embed>=3.2)
+if(NOT PYTHON3_FOUND)
+	pkg_check_modules(PYTHON3 REQUIRED python3>=3.2)
+endif()
 
 # Platform
 if(WIN32 OR MINGW)

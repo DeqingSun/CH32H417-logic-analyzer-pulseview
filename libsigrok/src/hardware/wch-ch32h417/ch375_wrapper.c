@@ -29,15 +29,10 @@
 #include "libsigrok-internal.h"
 #include <glib.h>
 
-/* Windows API头文件 - mingw-w64交叉编译 */
-#ifdef _WIN32
+/* CH375DLL is Windows-only; other platforms use no-op stubs for CI/build. */
+#if defined(_WIN32)
+
 #include <windows.h>
-#else
-/* 对于mingw-w64交叉编译，仍然使用Windows头文件 */
-#include <windef.h>
-#include <winbase.h>
-#include <libloaderapi.h>
-#endif
 
 #define LOG_PREFIX "ch375"
 
@@ -537,3 +532,169 @@ int ch375_set_device_notify(unsigned long index, char *deviceID, CH375NotifyCall
     }
     return result;
 }
+
+#else /* !_WIN32 */
+
+#define LOG_PREFIX "ch375"
+
+int ch375_init(void)
+{
+	sr_warn("CH375DLL is not available on this platform (Windows only)");
+	return SR_ERR;
+}
+
+void ch375_cleanup(void) {}
+int ch375_is_loaded(void) { return 0; }
+
+void *ch375_open_device(unsigned long index)
+{
+	(void)index;
+	return CH375_INVALID_HANDLE;
+}
+
+void ch375_close_device(unsigned long index) { (void)index; }
+
+unsigned long ch375_get_usb_id(unsigned long index)
+{
+	(void)index;
+	return 0;
+}
+
+const char *ch375_get_device_name(unsigned long index)
+{
+	(void)index;
+	return NULL;
+}
+
+int ch375_get_device_descr(unsigned long index, void *buffer, unsigned long *length)
+{
+	(void)index; (void)buffer; (void)length;
+	return CH375_FALSE;
+}
+
+int ch375_reset_device(unsigned long index)
+{
+	(void)index;
+	return CH375_FALSE;
+}
+
+int ch375_set_timeout(unsigned long index, unsigned long writeTimeout, unsigned long readTimeout)
+{
+	(void)index; (void)writeTimeout; (void)readTimeout;
+	return CH375_FALSE;
+}
+
+int ch375_set_timeout_ex(unsigned long index, unsigned long writeTimeout, unsigned long readTimeout,
+			 unsigned long auxTimeout, unsigned long interTimeout)
+{
+	(void)index; (void)writeTimeout; (void)readTimeout;
+	(void)auxTimeout; (void)interTimeout;
+	return CH375_FALSE;
+}
+
+int ch375_write_read(unsigned long index, void *iBuffer, void *oBuffer, unsigned long *ioLength)
+{
+	(void)index; (void)iBuffer; (void)oBuffer; (void)ioLength;
+	return CH375_FALSE;
+}
+
+int ch375_write_endpoint(unsigned long index, unsigned long pipe_num, void *buffer, unsigned long *length)
+{
+	(void)index; (void)pipe_num; (void)buffer; (void)length;
+	return CH375_FALSE;
+}
+
+int ch375_read_endpoint(unsigned long index, unsigned long pipe_num, void *buffer, unsigned long *length)
+{
+	(void)index; (void)pipe_num; (void)buffer; (void)length;
+	return CH375_FALSE;
+}
+
+int ch375_abort_endpoint_read(unsigned long index, unsigned long pipe_num)
+{
+	(void)index; (void)pipe_num;
+	return CH375_FALSE;
+}
+
+int ch375_abort_endpoint_write(unsigned long index, unsigned long pipe_num)
+{
+	(void)index; (void)pipe_num;
+	return CH375_FALSE;
+}
+
+int ch375_reset_in_endpoint(unsigned long index, unsigned long pipe_num)
+{
+	(void)index; (void)pipe_num;
+	return CH375_FALSE;
+}
+
+int ch375_reset_out_endpoint(unsigned long index, unsigned long pipe_num)
+{
+	(void)index; (void)pipe_num;
+	return CH375_FALSE;
+}
+
+int ch375_set_buf_upload_ex(unsigned long index, unsigned long enable, unsigned long pipe_num,
+			    unsigned long transferSize)
+{
+	(void)index; (void)enable; (void)pipe_num; (void)transferSize;
+	return CH375_FALSE;
+}
+
+int ch375_query_buf_upload_ex(unsigned long index, unsigned long pipe_num,
+			      unsigned long *transferCount, unsigned long *totalDataLen)
+{
+	(void)index; (void)pipe_num; (void)transferCount; (void)totalDataLen;
+	return CH375_FALSE;
+}
+
+int ch375_clear_buf_upload(unsigned long index, unsigned long pipe_num)
+{
+	(void)index; (void)pipe_num;
+	return CH375_FALSE;
+}
+
+int ch375_set_buf_download_ex(unsigned long index, unsigned long enable, unsigned long pipe_num,
+			      unsigned long transferSize)
+{
+	(void)index; (void)enable; (void)pipe_num; (void)transferSize;
+	return CH375_FALSE;
+}
+
+int ch375_set_io_mode(unsigned long index, unsigned long sync)
+{
+	(void)index; (void)sync;
+	return CH375_FALSE;
+}
+
+int ch375_read_data(unsigned long index, void *buffer, unsigned long *length)
+{
+	(void)index; (void)buffer; (void)length;
+	return CH375_FALSE;
+}
+
+int ch375_write_data(unsigned long index, void *buffer, unsigned long *length)
+{
+	(void)index; (void)buffer; (void)length;
+	return CH375_FALSE;
+}
+
+int ch375_abort_read(unsigned long index)
+{
+	(void)index;
+	return CH375_FALSE;
+}
+
+int ch375_abort_write(unsigned long index)
+{
+	(void)index;
+	return CH375_FALSE;
+}
+
+int ch375_set_device_notify(unsigned long index, char *deviceID, CH375NotifyCallback callback)
+{
+	(void)index; (void)deviceID; (void)callback;
+	return CH375_FALSE;
+}
+
+#endif /* _WIN32 */

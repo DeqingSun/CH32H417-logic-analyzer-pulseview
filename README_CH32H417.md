@@ -101,6 +101,8 @@ cd build_cmake/logicanalyzer_build
 
 产物：`LogicAnalyzer-macOS`（zip，内含 `LogicAnalyzer.app`、130 个解码器和 `run.sh`）
 
+> **注意：** CH32H417 硬件通信依赖 Windows 专用 CH375DLL，macOS 版可编译运行（含 Demo 驱动和协议解码），但无法连接 CH32H417 设备。
+
 本地 macOS 构建：
 
 ```bash

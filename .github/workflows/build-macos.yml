@@ -1,0 +1,41 @@
+name: Build macOS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          chmod +x setup_env_macos.sh build.sh
+          ./setup_env_macos.sh
+
+      - name: Build and package
+        run: |
+          QT_PREFIX="$(brew --prefix qt@5)"
+          PYTHON_PREFIX="$(brew --prefix python@3.12)"
+          export PATH="$QT_PREFIX/bin:$PATH"
+          export PKG_CONFIG_PATH="$QT_PREFIX/lib/pkgconfig:$PYTHON_PREFIX/Frameworks/Python.framework/Versions/3.12/lib/pkgconfig:${PKG_CONFIG_PATH}"
+          export CMAKE_PREFIX_PATH="$QT_PREFIX:$(brew --prefix boost)"
+          ./build.sh --clean --package
+
+      - name: Create zip
+        run: |
+          cd dist
+          zip -ry ../LogicAnalyzer-macOS.zip LogicAnalyzer
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LogicAnalyzer-macOS
+          path: LogicAnalyzer-macOS.zip

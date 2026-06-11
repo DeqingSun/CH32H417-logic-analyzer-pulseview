@@ -89,14 +89,33 @@ cd build_cmake/logicanalyzer_build
 
 ## GitHub Actions 自动构建
 
-仓库包含 Windows 自动构建工作流（`.github/workflows/build-windows.yml`），在 GitHub 上使用 MSYS2 MINGW64 环境执行 `./build.sh --clean --package`。
+### Windows
 
-触发条件：
+工作流：`.github/workflows/build-windows.yml`（MSYS2 MINGW64，执行 `./build.sh --clean --package`）
+
+产物：`LogicAnalyzer-Windows-x64`（便携版 zip，内含 `LogicAnalyzer.exe`、DLL、解码器和 `run.bat`）
+
+### macOS
+
+工作流：`.github/workflows/build-macos.yml`（Homebrew + Qt5，执行 `./build.sh --clean --package`）
+
+产物：`LogicAnalyzer-macOS`（zip，内含 `LogicAnalyzer.app`、130 个解码器和 `run.sh`）
+
+本地 macOS 构建：
+
+```bash
+./setup_env_macos.sh   # 首次安装 Homebrew 依赖
+./build.sh --package
+open dist/LogicAnalyzer/LogicAnalyzer.app
+```
+
+### 触发条件
+
 - 推送到 `main` 或 `master` 分支
 - Pull Request
-- 手动触发（Actions → Build Windows → Run workflow）
+- 手动触发（Actions → Build Windows / Build macOS → Run workflow）
 
-构建完成后，在对应 workflow run 的 **Artifacts** 区域下载 `LogicAnalyzer-Windows-x64`（便携版 zip，内含 `LogicAnalyzer.exe`、DLL、解码器和 `run.bat`）。
+构建完成后，在对应 workflow run 的 **Artifacts** 区域下载产物。
 
 ## 添加自定义驱动
 

@@ -118,7 +118,7 @@ endif()
 
 set(QT_LIBRARIES Qt5::Gui Qt5::Widgets Qt5::Svg)
 
-set(BOOSTCOMPS filesystem serialization system)
+set(BOOSTCOMPS filesystem serialization)
 if(ENABLE_TESTS)
 	list(APPEND BOOSTCOMPS unit_test_framework)
 endif()
@@ -532,31 +532,36 @@ include_directories(
 	${Boost_INCLUDE_DIRS}
 )
 
-# MSYS2 MinGW: resolve hidapi include to a Windows path for native GCC (pkg-config or cygpath)
-if(WIN32)
-	set(HIDAPI_INCLUDE_DIR "")
+# hidapi headers for IAP/mainbar (pkg-config; MSYS2 needs Windows path fallback)
+set(HIDAPI_INCLUDE_DIR "")
+execute_process(
+	COMMAND pkg-config --cflags-only-I hidapi
+	OUTPUT_VARIABLE _hidapi_cflags
+	OUTPUT_STRIP_TRAILING_WHITESPACE
+	RESULT_VARIABLE _hidapi_rc
+	ERROR_QUIET
+)
+if(_hidapi_rc EQUAL 0 AND _hidapi_cflags)
+	string(REGEX REPLACE "^-I" "" HIDAPI_INCLUDE_DIR "${_hidapi_cflags}")
+	string(STRIP "${HIDAPI_INCLUDE_DIR}" HIDAPI_INCLUDE_DIR)
+elseif(WIN32)
 	execute_process(
-		COMMAND pkg-config --cflags-only-I hidapi
-		OUTPUT_VARIABLE _hidapi_cflags
+		COMMAND cygpath -m /mingw64/include/hidapi
+		OUTPUT_VARIABLE HIDAPI_INCLUDE_DIR
 		OUTPUT_STRIP_TRAILING_WHITESPACE
-		RESULT_VARIABLE _hidapi_rc
 		ERROR_QUIET
 	)
-	if(_hidapi_rc EQUAL 0 AND _hidapi_cflags)
-		string(REGEX REPLACE "^-I" "" HIDAPI_INCLUDE_DIR "${_hidapi_cflags}")
-		string(STRIP "${HIDAPI_INCLUDE_DIR}" HIDAPI_INCLUDE_DIR)
-	else()
-		execute_process(
-			COMMAND cygpath -m /mingw64/include/hidapi
-			OUTPUT_VARIABLE HIDAPI_INCLUDE_DIR
-			OUTPUT_STRIP_TRAILING_WHITESPACE
-			ERROR_QUIET
-		)
-	endif()
-	if(HIDAPI_INCLUDE_DIR)
-		include_directories(${HIDAPI_INCLUDE_DIR})
-		message(STATUS "hidapi include dir: ${HIDAPI_INCLUDE_DIR}")
-	endif()
+elseif(APPLE)
+	foreach(_hidapi_path /opt/homebrew/include/hidapi /usr/local/include/hidapi)
+		if(EXISTS "${_hidapi_path}/hidapi.h")
+			set(HIDAPI_INCLUDE_DIR "${_hidapi_path}")
+			break()
+		endif()
+	endforeach()
+endif()
+if(HIDAPI_INCLUDE_DIR)
+	include_directories(${HIDAPI_INCLUDE_DIR})
+	message(STATUS "hidapi include dir: ${HIDAPI_INCLUDE_DIR}")
 endif()
 
 if(STATIC_PKGDEPS_LIBS)
@@ -700,6 +705,8 @@ if(WIN32)
 	list(APPEND PULSEVIEW_LINK_LIBS ${QT5ALL_LDFLAGS})
 	# Add hidapi for IAP dialog
 	list(APPEND PULSEVIEW_LINK_LIBS -lhidapi -lsetupapi -lusb-1.0 -ldwmapi)
+elseif(APPLE)
+	list(APPEND PULSEVIEW_LINK_LIBS -lhidapi -lusb-1.0)
 endif()
 
 if(ENABLE_STACKTRACE)

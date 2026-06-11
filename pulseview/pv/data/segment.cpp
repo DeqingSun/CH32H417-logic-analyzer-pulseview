@@ -540,11 +540,18 @@ uint64_t Segment::get_iterator_valid_length(SegmentDataIterator* it)
 
 void Segment::set_channel_numner(uint16_t channel_num)
 {
+	if (channel_num == 0)
+		channel_num = 8;
+
 	channel_num_ = channel_num;
-	unit_size_temp = (8.0 / channel_num_);
-	if (data_zoom == NULL)
-		data_zoom = new uint8_t[chunk_size_ * unit_size_temp];
-	if (data_zoom == NULL) {
+	unit_size_temp = (channel_num_ < 8) ? (8 / channel_num_) : 1;
+
+	if (data_zoom == NULL && channel_num_ < 8) {
+		const uint64_t zoom_size = chunk_size_ * unit_size_temp;
+		if (zoom_size > 0)
+			data_zoom = new uint8_t[zoom_size];
+	}
+	if (data_zoom == NULL && channel_num_ < 8) {
 		qDebug() << __FILE__ << " :" << __LINE__ << ":MALLOC MEMORY FAILE";
 	}
 }

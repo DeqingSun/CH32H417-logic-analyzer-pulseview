@@ -1063,6 +1063,9 @@ uint16_t DecodeSignal::get_input_channel_number(uint32_t segment_id)
 			break;
 		}
 
+	if (channel_num == 0)
+		channel_num = 8;
+
 	return channel_num;
 }
 
@@ -1288,6 +1291,9 @@ void DecodeSignal::mux_logic_samples(uint32_t segment_id, const int64_t start, c
 			signal_in_bitpos.push_back(bitpos % 8);
 		}
 
+	if (signal_data.empty())
+		return;
+
 	shared_ptr<LogicSegment> output_segment;
 	try {
 		output_segment = logic_mux_data_->logic_segments().at(segment_id);
@@ -1299,8 +1305,12 @@ void DecodeSignal::mux_logic_samples(uint32_t segment_id, const int64_t start, c
 		return;
 	}
 
+	const uint64_t out_unit_size = output_segment->unit_size();
+	if (out_unit_size == 0)
+		return;
+
 	// Perform the muxing of signal data into the output data
-	uint8_t* output = new uint8_t[(end - start) * output_segment->unit_size()];
+	uint8_t* output = new uint8_t[(end - start) * out_unit_size];
 	unsigned int signal_count = signal_data.size();
 
 	for (int64_t sample_cnt = 0; !logic_mux_interrupt_ && (sample_cnt < (end - start));
@@ -1309,8 +1319,8 @@ void DecodeSignal::mux_logic_samples(uint32_t segment_id, const int64_t start, c
 		int bitpos = 0;
 		uint8_t bytepos = 0;
 
-		const int out_sample_pos = sample_cnt * output_segment->unit_size();
-		for (unsigned int i = 0; i < output_segment->unit_size(); i++)
+		const int out_sample_pos = sample_cnt * out_unit_size;
+		for (unsigned int i = 0; i < out_unit_size; i++)
 			output[out_sample_pos + i] = 0;
 
 		for (unsigned int i = 0; i < signal_count; i++) {
@@ -1329,26 +1339,40 @@ void DecodeSignal::mux_logic_samples(uint32_t segment_id, const int64_t start, c
 			}
 		}
 	}
-	output_zoom = new uint8_t[(uint64_t)(((end - start) / (double)output_segment->unit_size_temp) + 7)];
-	if (output_zoom == NULL) {
-		return;
-	}
-	if (output_segment->channel_num_ == 4){	
-		if (channel_8_switch_4(output, end - start, output_zoom) == false){
+	if (output_segment->channel_num_ < 8) {
+		const double unit_size_zoom = 8.0 / output_segment->channel_num_;
+		const uint64_t zoom_samples = (uint64_t)((end - start) / unit_size_zoom);
+		output_zoom = new uint8_t[zoom_samples + 7];
+		if (output_zoom == NULL) {
+			delete[] output;
+			for (const uint8_t* data : signal_data)
+				delete[] data;
 			return;
 		}
-	}else if (output_segment->channel_num_ == 2){
-		if (channel_8_switch_2(output, end - start, output_zoom) == false){
-			return;
+		if (output_segment->channel_num_ == 4) {
+			if (channel_8_switch_4(output, end - start, output_zoom) == false) {
+				delete[] output;
+				delete[] output_zoom;
+				for (const uint8_t* data : signal_data)
+					delete[] data;
+				return;
+			}
+		} else if (output_segment->channel_num_ == 2) {
+			if (channel_8_switch_2(output, end - start, output_zoom) == false) {
+				delete[] output;
+				delete[] output_zoom;
+				for (const uint8_t* data : signal_data)
+					delete[] data;
+				return;
+			}
 		}
-	}
-	if (output_segment->channel_num_ < 8){
-		output_segment->append_payload(output_zoom, (uint64_t)((end - start) / (double)output_segment->unit_size_temp));
-	} else{
-		output_segment->append_payload(output, (end - start) * output_segment->unit_size());
+		output_segment->append_payload(output_zoom, zoom_samples);
+	} else {
+		output_segment->append_payload(output, (end - start) * out_unit_size);
 	}
 	delete[] output;
-	delete[] output_zoom;
+	if (output_zoom)
+		delete[] output_zoom;
 	for (const uint8_t* data : signal_data)
 		delete[] data;
 }
@@ -1395,6 +1419,14 @@ void DecodeSignal::logic_mux_proc()
 
 			if (samples_to_process > 0) {
 				const uint64_t unit_size = output_segment->unit_size();
+				if (unit_size == 0)
+					break;
+
+				const uint16_t input_channel_num =
+					get_input_channel_number(segment_id);
+				if (input_channel_num > 0)
+					output_segment->set_channel_numner(input_channel_num);
+
 				const uint64_t chunk_sample_count = DecodeChunkLength / unit_size;
 
 				uint64_t processed_samples = 0;

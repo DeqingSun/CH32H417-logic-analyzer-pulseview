@@ -84,6 +84,9 @@ if [ $IS_WINDOWS -eq 1 ]; then
     MINGW_EXTRA="-DWIN32=ON"
 elif [ $IS_MACOS -eq 1 ]; then
     echo "Detected macOS build environment"
+    # GitHub Actions runners may use a newer SDK than end-user Macs; target 11.0 explicitly.
+    export MACOSX_DEPLOYMENT_TARGET=11.0
+    MINGW_EXTRA="-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"
 fi
 
 # ============================================================================
@@ -465,6 +468,13 @@ EOF
                 macos_has_external_deps "$MAIN_BIN" "$FRAMEWORKS_DIR"/*.dylib || break
             done
         }
+        macos_set_minimum_system_version() {
+            local plist="$APP/Contents/Info.plist"
+            # macdeployqt may raise LSMinimumSystemVersion to the CI runner's macOS release.
+            /usr/libexec/PlistBuddy -c "Delete :LSMinimumSystemVersion" "$plist" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 11.0" "$plist"
+            echo "  LSMinimumSystemVersion set to 11.0"
+        }
         macos_normalize_python_framework() {
             local py_home="${PYTHON_PREFIX:-$(brew --prefix python@3.12 2>/dev/null)}"
             local py_src="$py_home/Frameworks/Python.framework"
@@ -551,6 +561,8 @@ EOF
     <string>0.2</string>
     <key>CFBundleShortVersionString</key>
     <string>0.2</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>
@@ -594,6 +606,7 @@ PLIST
         macos_bundle_all_deps
         rm -f "$MACOS_BUNDLE_VISITED"
         macos_normalize_python_framework
+        macos_set_minimum_system_version
 
         DECODERS_SRC="$PREFIX/share/libsigrokdecode/decoders"
         if [ -d "$DECODERS_SRC" ]; then

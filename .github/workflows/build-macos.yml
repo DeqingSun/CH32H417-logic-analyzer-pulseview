@@ -30,6 +30,7 @@ jobs:
       - name: Verify app bundle
         run: |
           APP=dist/LogicAnalyzer/LogicAnalyzer.app
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")" = "11.0"
           codesign --verify --deep "$APP"
           ditto "$APP" /tmp/LogicAnalyzer-test.app
           # Quarantine xattrs are only relevant after download; ignore broken symlinks

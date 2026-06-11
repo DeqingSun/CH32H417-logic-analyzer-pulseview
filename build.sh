@@ -465,6 +465,36 @@ EOF
                 macos_has_external_deps "$MAIN_BIN" "$FRAMEWORKS_DIR"/*.dylib || break
             done
         }
+        macos_normalize_python_framework() {
+            local py_home="${PYTHON_PREFIX:-$(brew --prefix python@3.12 2>/dev/null)}"
+            local py_src="$py_home/Frameworks/Python.framework"
+            local py_fw="$FRAMEWORKS_DIR/Python.framework"
+            local py_target="@executable_path/../Frameworks/Python.framework/Versions/Current/Python"
+            local f old ver
+
+            [ -d "$py_src" ] || return 0
+            echo "  Normalizing Python.framework to python@3.12..."
+            rm -rf "$py_fw"
+            cp -R "$py_src" "$py_fw"
+            for ver in "$py_fw/Versions/"*; do
+                [ -e "$ver" ] || continue
+                [ "$(basename "$ver")" = "3.12" ] && continue
+                [ "$(basename "$ver")" = "Current" ] && continue
+                rm -rf "$ver"
+            done
+            ln -sfh 3.12 "$py_fw/Versions/Current"
+            find "$py_fw" -type l | while read -r link; do
+                [ -e "$link" ] || rm -f "$link"
+            done
+            while IFS= read -r -d '' f; do
+                macos_is_macho "$f" || continue
+                while read -r old; do
+                    [[ "$old" != *Python.framework* ]] && continue
+                    [[ "$old" == "$py_target" ]] && continue
+                    install_name_tool -change "$old" "$py_target" "$f" 2>/dev/null || true
+                done < <(otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}')
+            done < <(find "$APP/Contents" -type f -print0)
+        }
         macos_sign_file() {
             codesign --force --sign - --timestamp=none "$1" || {
                 echo "[error] codesign failed: $1"
@@ -563,6 +593,7 @@ PLIST
         echo "  Bundling non-Qt libraries into Contents/Frameworks..."
         macos_bundle_all_deps
         rm -f "$MACOS_BUNDLE_VISITED"
+        macos_normalize_python_framework
 
         DECODERS_SRC="$PREFIX/share/libsigrokdecode/decoders"
         if [ -d "$DECODERS_SRC" ]; then

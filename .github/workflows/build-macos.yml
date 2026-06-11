@@ -32,7 +32,8 @@ jobs:
           APP=dist/LogicAnalyzer/LogicAnalyzer.app
           codesign --verify --deep "$APP"
           ditto "$APP" /tmp/LogicAnalyzer-test.app
-          xattr -cr /tmp/LogicAnalyzer-test.app
+          # Quarantine xattrs are only relevant after download; ignore broken symlinks
+          xattr -cr /tmp/LogicAnalyzer-test.app 2>/dev/null || true
           /tmp/LogicAnalyzer-test.app/Contents/MacOS/LogicAnalyzer --help >/dev/null
 
       - name: Create zip

@@ -532,8 +532,10 @@ include_directories(
 	${Boost_INCLUDE_DIRS}
 )
 
-# MSYS2 MinGW: hidapi has no pkg-config, add include path directly
-include_directories(D:/msys64/mingw64/include/hidapi)
+# MSYS2 MinGW: hidapi has no pkg-config on older setups; use MSYS2 path (works on any install location)
+if(WIN32)
+	include_directories(/mingw64/include/hidapi)
+endif()
 
 if(STATIC_PKGDEPS_LIBS)
 	include_directories(${PKGDEPS_STATIC_INCLUDE_DIRS})

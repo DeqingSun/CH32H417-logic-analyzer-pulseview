@@ -64,7 +64,7 @@ class Viewport : public ViewWidget, public GlobalSettingsInterface
 	Q_OBJECT
 
 Q_SIGNALS:
-	mouse_marker_pressed(QMouseEvent *);
+	void mouse_marker_pressed(QMouseEvent *);
 
 public:
 	explicit Viewport(View &parent);

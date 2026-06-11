@@ -13,10 +13,14 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      - name: Configure git line endings
+        run: git config --global core.autocrlf input
+
       - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
+          sed -i '' 's/\r$//' setup_env_macos.sh build.sh
           chmod +x setup_env_macos.sh build.sh
           ./setup_env_macos.sh
 

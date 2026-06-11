@@ -26,22 +26,21 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     IS_MACOS=1
     if command -v brew &>/dev/null; then
         QT_PREFIX="$(brew --prefix qt@5 2>/dev/null || brew --prefix qt 2>/dev/null || true)"
-        BOOST_PREFIX="$(brew --prefix boost 2>/dev/null || true)"
         PYTHON_PREFIX="$(brew --prefix python@3.12 2>/dev/null || brew --prefix python3 2>/dev/null || true)"
         if [ -n "$QT_PREFIX" ]; then
             export PATH="$QT_PREFIX/bin:$PATH"
-            export PKG_CONFIG_PATH="$QT_PREFIX/lib/pkgconfig:${PKG_CONFIG_PATH}"
         fi
         if [ -n "$PYTHON_PREFIX" ] && [ -d "$PYTHON_PREFIX/Frameworks/Python.framework/Versions" ]; then
             PYVER="$(ls "$PYTHON_PREFIX/Frameworks/Python.framework/Versions" | grep -E '^[0-9]' | head -1)"
             export PKG_CONFIG_PATH="$PYTHON_PREFIX/Frameworks/Python.framework/Versions/$PYVER/lib/pkgconfig:${PKG_CONFIG_PATH}"
         fi
-        for p in "$QT_PREFIX" "$BOOST_PREFIX" "$(brew --prefix glib 2>/dev/null)" "$(brew --prefix libusb 2>/dev/null)"; do
-            [ -n "$p" ] && export CMAKE_PREFIX_PATH="${p}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
-            [ -n "$p" ] && [ -d "$p/lib" ] && export LDFLAGS="-L$p/lib ${LDFLAGS}"
-        done
-        for p in "$QT_PREFIX" "$(brew --prefix glib 2>/dev/null)" "$(brew --prefix libusb 2>/dev/null)"; do
-            [ -n "$p" ] && [ -d "$p/lib/pkgconfig" ] && export PKG_CONFIG_PATH="$p/lib/pkgconfig:${PKG_CONFIG_PATH}"
+        for formula in qt@5 boost python@3.12 glib glibmm libsigc++ libusb hidapi libzip; do
+            p="$(brew --prefix "$formula" 2>/dev/null || true)"
+            [ -z "$p" ] && continue
+            export CMAKE_PREFIX_PATH="${p}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+            [ -d "$p/lib" ] && export LDFLAGS="-L$p/lib ${LDFLAGS}"
+            [ -d "$p/include" ] && export CPPFLAGS="-I$p/include ${CPPFLAGS}"
+            [ -d "$p/lib/pkgconfig" ] && export PKG_CONFIG_PATH="$p/lib/pkgconfig:${PKG_CONFIG_PATH}"
         done
     fi
 fi

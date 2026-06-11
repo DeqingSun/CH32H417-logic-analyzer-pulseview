@@ -20,7 +20,7 @@ echo ">>> Installing build dependencies via Homebrew..."
 brew update
 brew install \
     cmake ninja pkg-config \
-    glib glibmm libusb hidapi libzip \
+    glib glibmm libsigc++ libusb hidapi libzip \
     boost qt@5 python@3.12
 
 QT_PREFIX="$(brew --prefix qt@5)"
@@ -32,14 +32,7 @@ cat <<EOF
  Environment setup complete!
 ============================================
 
-Add to your shell before building (or run ./build.sh directly):
-
-  export PATH="$QT_PREFIX/bin:\$PATH"
-  export PKG_CONFIG_PATH="$QT_PREFIX/lib/pkgconfig:\$PKG_CONFIG_PATH"
-  export PKG_CONFIG_PATH="$PYTHON_PREFIX/Frameworks/Python.framework/Versions/3.12/lib/pkgconfig:\$PKG_CONFIG_PATH"
-  export CMAKE_PREFIX_PATH="$QT_PREFIX:$(brew --prefix boost)"
-
-Then:
+Then build (./build.sh sets Homebrew pkg-config paths automatically):
 
   ./build.sh --package
   open dist/LogicAnalyzer/LogicAnalyzer.app

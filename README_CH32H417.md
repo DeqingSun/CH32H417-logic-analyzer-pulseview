@@ -106,7 +106,7 @@ cd build_cmake/logicanalyzer_build
 本地 macOS 构建：
 
 ```bash
-./setup_env_macos.sh   # 首次安装 Homebrew 依赖
+./setup_env_macos.sh   # 安装 glibmm@2.66 + libsigc++@2（需 glibmm-2.4，非默认 glibmm 2.88）
 ./build.sh --package
 open dist/LogicAnalyzer/LogicAnalyzer.app
 ```

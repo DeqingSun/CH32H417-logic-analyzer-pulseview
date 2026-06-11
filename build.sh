@@ -34,7 +34,7 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
             PYVER="$(ls "$PYTHON_PREFIX/Frameworks/Python.framework/Versions" | grep -E '^[0-9]' | head -1)"
             export PKG_CONFIG_PATH="$PYTHON_PREFIX/Frameworks/Python.framework/Versions/$PYVER/lib/pkgconfig:${PKG_CONFIG_PATH}"
         fi
-        for formula in qt@5 boost python@3.12 glib glibmm libsigc++ libusb hidapi libzip; do
+        for formula in qt@5 boost python@3.12 glib glibmm@2.66 libsigc++@2 libusb hidapi libzip; do
             p="$(brew --prefix "$formula" 2>/dev/null || true)"
             [ -z "$p" ] && continue
             export CMAKE_PREFIX_PATH="${p}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
@@ -42,6 +42,11 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
             [ -d "$p/include" ] && export CPPFLAGS="-I$p/include ${CPPFLAGS}"
             [ -d "$p/lib/pkgconfig" ] && export PKG_CONFIG_PATH="$p/lib/pkgconfig:${PKG_CONFIG_PATH}"
         done
+        if ! pkg-config --exists 'glibmm-2.4 >= 2.32.0'; then
+            echo "[error] glibmm-2.4 not found. Install: brew install glibmm@2.66 libsigc++@2"
+            echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+            exit 1
+        fi
     fi
 fi
 

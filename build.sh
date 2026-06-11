@@ -300,41 +300,101 @@ EOF
         APP="$DIST_DIR/LogicAnalyzer.app"
         MACOS_DIR="$APP/Contents/MacOS"
         RES_DIR="$APP/Contents/Resources"
+        FRAMEWORKS_DIR="$APP/Contents/Frameworks"
         mkdir -p "$MACOS_DIR" "$RES_DIR"
 
-        cp "$BUILD_DIR/logicanalyzer_build/LogicAnalyzer" "$MACOS_DIR/LogicAnalyzer"
-        chmod +x "$MACOS_DIR/LogicAnalyzer"
-        echo "  LogicAnalyzer.app/Contents/MacOS/LogicAnalyzer"
-
-        echo "  Bundling libsigrok libraries..."
-        for dylib in "$PREFIX/lib"/libsigrok*.dylib "$PREFIX/lib"/libsigrokdecode*.dylib; do
-            [ -f "$dylib" ] || continue
-            cp "$dylib" "$MACOS_DIR/"
-            echo "    $(basename "$dylib")"
-        done
-
-        install_name_tool -add_rpath @executable_path "$MACOS_DIR/LogicAnalyzer" 2>/dev/null || true
-        otool -L "$MACOS_DIR/LogicAnalyzer" | awk '/^\t\// {print $1}' | while read -r old; do
-            case "$old" in
-                "$PREFIX"/*|/usr/local/*|/opt/homebrew/*)
-                    base=$(basename "$old")
-                    if [ -f "$MACOS_DIR/$base" ]; then
-                        install_name_tool -change "$old" "@executable_path/$base" "$MACOS_DIR/LogicAnalyzer" 2>/dev/null || true
-                    fi
-                    ;;
+        # install_name_tool invalidates code signatures; re-sign after all bundling.
+        MACOS_BUNDLE_VISITED="$(mktemp)"
+        macos_should_bundle_dep() {
+            case "$1" in
+                @*|/usr/lib/*|/System/Library/*) return 1 ;;
             esac
-        done
-        for dylib in "$MACOS_DIR"/*.dylib; do
-            [ -f "$dylib" ] || continue
-            install_name_tool -id "@executable_path/$(basename "$dylib")" "$dylib" 2>/dev/null || true
-            otool -L "$dylib" | awk '/^\t\// {print $1}' | while read -r old; do
-                case "$old" in
-                    "$PREFIX"/*)
-                        install_name_tool -change "$old" "@executable_path/$(basename "$old")" "$dylib" 2>/dev/null || true
-                        ;;
-                esac
+            return 0
+        }
+        macos_bundle_framework() {
+            local fw_root="$1"
+            [ -d "$fw_root" ] || return 0
+            grep -qxF "$fw_root" "$MACOS_BUNDLE_VISITED" 2>/dev/null && return 0
+            echo "$fw_root" >> "$MACOS_BUNDLE_VISITED"
+
+            local fw_name fw_dest inner
+            fw_name="$(basename "$fw_root" .framework)"
+            fw_dest="$FRAMEWORKS_DIR/$fw_name.framework"
+            mkdir -p "$FRAMEWORKS_DIR"
+            rm -rf "$fw_dest"
+            cp -R "$fw_root" "$fw_dest"
+            echo "    $fw_name.framework"
+            for inner in \
+                "$fw_dest/Versions/5/$fw_name" \
+                "$fw_dest/Versions/A/$fw_name" \
+                "$fw_dest/Versions/Current/$fw_name"; do
+                [ -f "$inner" ] && macos_fixup_binary "$inner" && break
             done
-        done
+        }
+        macos_bundle_dep() {
+            local dep="$1"
+            macos_should_bundle_dep "$dep" || return 0
+            [ -f "$dep" ] || return 0
+            grep -qxF "$dep" "$MACOS_BUNDLE_VISITED" 2>/dev/null && return 0
+            echo "$dep" >> "$MACOS_BUNDLE_VISITED"
+
+            local base dest
+            base="$(basename "$dep")"
+            dest="$MACOS_DIR/$base"
+            cp -f "$dep" "$dest"
+            chmod 755 "$dest"
+            install_name_tool -id "@executable_path/$base" "$dest" 2>/dev/null || true
+            echo "    $base"
+            macos_fixup_binary "$dest"
+        }
+        macos_fixup_binary() {
+            local binary="$1"
+            install_name_tool -add_rpath @executable_path "$binary" 2>/dev/null || true
+            otool -L "$binary" | tail -n +2 | awk '{print $1}' | while read -r dep; do
+                macos_should_bundle_dep "$dep" || continue
+                [ -f "$dep" ] || continue
+                if [[ "$dep" == *".framework/"* ]]; then
+                    local fw_root fw_name new_path
+                    fw_root="${dep%%.framework/*}.framework"
+                    fw_name="$(basename "$fw_root" .framework)"
+                    macos_bundle_framework "$fw_root"
+                    new_path="@executable_path/../Frameworks/$fw_name.framework${dep#*${fw_name}.framework}"
+                    install_name_tool -change "$dep" "$new_path" "$binary" 2>/dev/null || true
+                else
+                    macos_bundle_dep "$dep"
+                    install_name_tool -change "$dep" "@executable_path/$(basename "$dep")" "$binary" 2>/dev/null || true
+                fi
+            done
+        }
+        macos_sign_app() {
+            local app="$1"
+            local bin="$2"
+            echo "  Ad-hoc signing app bundle..."
+            find "$app/Contents/PlugIns" -name '*.dylib' 2>/dev/null | while read -r plug; do
+                codesign --force --sign - "$plug" 2>/dev/null || true
+            done
+            find "$app/Contents/MacOS" -name '*.dylib' 2>/dev/null | while read -r lib; do
+                codesign --force --sign - "$lib" 2>/dev/null || true
+            done
+            if [ -d "$app/Contents/Frameworks" ]; then
+                find "$app/Contents/Frameworks" -maxdepth 1 -name '*.framework' 2>/dev/null | while read -r fw; do
+                    local fwname inner
+                    fwname="$(basename "$fw" .framework)"
+                    for inner in \
+                        "$fw/Versions/5/$fwname" \
+                        "$fw/Versions/A/$fwname" \
+                        "$fw/Versions/Current/$fwname"; do
+                        if [ -f "$inner" ]; then
+                            codesign --force --sign - "$inner" 2>/dev/null || true
+                            break
+                        fi
+                    done
+                    codesign --force --sign - "$fw" 2>/dev/null || true
+                done
+            fi
+            codesign --force --sign - "$bin" 2>/dev/null || true
+            codesign --force --sign - "$app" 2>/dev/null || true
+        }
 
         cat > "$APP/Contents/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -359,6 +419,10 @@ EOF
 </plist>
 PLIST
 
+        cp "$BUILD_DIR/logicanalyzer_build/LogicAnalyzer" "$MACOS_DIR/LogicAnalyzer"
+        chmod +x "$MACOS_DIR/LogicAnalyzer"
+        echo "  LogicAnalyzer.app/Contents/MacOS/LogicAnalyzer"
+
         MACDEPLOYQT=""
         if command -v macdeployqt &>/dev/null; then
             MACDEPLOYQT="$(command -v macdeployqt)"
@@ -371,6 +435,18 @@ PLIST
         else
             echo "  (macdeployqt not found, Qt frameworks must be installed separately)"
         fi
+
+        echo "  Bundling libraries..."
+        for dylib in "$PREFIX/lib"/libsigrok*.dylib "$PREFIX/lib"/libsigrokdecode*.dylib; do
+            [ -f "$dylib" ] || continue
+            macos_bundle_dep "$dylib"
+        done
+        macos_fixup_binary "$MACOS_DIR/LogicAnalyzer"
+        for dylib in "$MACOS_DIR"/*.dylib; do
+            [ -f "$dylib" ] || continue
+            macos_fixup_binary "$dylib"
+        done
+        rm -f "$MACOS_BUNDLE_VISITED"
 
         DECODERS_SRC="$PREFIX/share/libsigrokdecode/decoders"
         if [ -d "$DECODERS_SRC" ]; then
@@ -387,6 +463,8 @@ export SIGROKDECODE_DIR="$DIR/../Resources/decoders"
 exec "$DIR/LogicAnalyzer.bin" "$@"
 WRAPPER
         chmod +x "$MACOS_DIR/LogicAnalyzer"
+
+        macos_sign_app "$APP" "$MACOS_DIR/LogicAnalyzer.bin"
 
         cat > "$DIST_DIR/run.sh" << 'EOF'
 #!/bin/bash

@@ -30,7 +30,8 @@ jobs:
       - name: Create zip
         run: |
           cd dist
-          zip -ry ../LogicAnalyzer-macOS.zip LogicAnalyzer
+          # ditto preserves app bundle code-signature extended attributes
+          ditto -c -k --sequesterRsrc --keepParent LogicAnalyzer ../LogicAnalyzer-macOS.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

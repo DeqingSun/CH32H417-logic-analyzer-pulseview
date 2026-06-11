@@ -335,7 +335,7 @@ void Viewport::mouseDoubleClickEvent(QMouseEvent *event)
 	// else if (event->buttons() & Qt::RightButton)
 	// 	view_.zoom(-2.0, event->x());
 	bezier_start_ = QPointF(0,0);
-	add_rule_flag(event);
+	rule_flag_added(event);
 }
 
 void Viewport::wheelEvent(QWheelEvent *event)

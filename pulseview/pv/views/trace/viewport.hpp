@@ -24,14 +24,27 @@
 
 #include <boost/optional.hpp>
 
+#include <QMouseEvent>
 #include <QPoint>
 #include <QTimer>
 #include <QTouchEvent>
 
+/* QWidget before glib/Qt-unrelated headers: macOS defines a 'signals' macro
+ * in sys/signal.h (pulled in transitively) that breaks Q_SIGNALS. */
+#include "viewwidget.hpp"
+
 #include <pv/globalsettings.hpp>
 
 #include "pv/util.hpp"
-#include "viewwidget.hpp"
+
+#if defined(Q_OS_MAC) || defined(__APPLE__)
+# ifdef add_rule
+#  undef add_rule
+# endif
+# ifdef delete_rule
+#  undef delete_rule
+# endif
+#endif
 
 using std::shared_ptr;
 using std::vector;
@@ -51,7 +64,7 @@ class Viewport : public ViewWidget, public GlobalSettingsInterface
 	Q_OBJECT
 
 Q_SIGNALS:
-	rule_flag_added(QMouseEvent *);
+	mouse_marker_pressed(QMouseEvent *);
 
 public:
 	explicit Viewport(View &parent);

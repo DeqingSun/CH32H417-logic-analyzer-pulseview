@@ -223,7 +223,7 @@ View::View(Session &session, bool is_main_view, QMainWindow *parent) :
 	connect(&lazy_event_handler_, SIGNAL(timeout()),
 		this, SLOT(process_sticky_events()));
 
-	connect(viewport_, SIGNAL(rule_flag_added(QMouseEvent*)), ruler_, SLOT(on_add_RuleFlag(QMouseEvent*)));
+	connect(viewport_, SIGNAL(mouse_marker_pressed(QMouseEvent*)), ruler_, SLOT(on_add_RuleFlag(QMouseEvent*)));
 	lazy_event_handler_.setSingleShot(true);
 	lazy_event_handler_.setInterval(1000 / ViewBase::MaxViewAutoUpdateRate);
 

@@ -38,6 +38,7 @@
 
 #include <QCheckBox>
 #include <QDebug>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QMessageBox>
@@ -353,6 +354,15 @@ int main(int argc, char *argv[])
 	do {
 
 #ifdef ENABLE_DECODE
+#ifdef __APPLE__
+		if (qEnvironmentVariableIsEmpty("SIGROKDECODE_DIR")) {
+			const QString decoder_dir = QDir(a.applicationDirPath())
+				.filePath("../Resources/decoders");
+			if (QDir(decoder_dir).exists())
+				qputenv("SIGROKDECODE_DIR",
+					QFileInfo(decoder_dir).canonicalFilePath().toUtf8());
+		}
+#endif
 		// Initialise libsigrokdecode
 		if (srd_init(nullptr) != SRD_OK) {
 			qDebug() << "ERROR: libsigrokdecode init failed.";

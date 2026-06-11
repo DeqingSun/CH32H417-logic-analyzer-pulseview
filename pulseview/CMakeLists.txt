@@ -532,9 +532,31 @@ include_directories(
 	${Boost_INCLUDE_DIRS}
 )
 
-# MSYS2 MinGW: hidapi has no pkg-config on older setups; use MSYS2 path (works on any install location)
+# MSYS2 MinGW: resolve hidapi include to a Windows path for native GCC (pkg-config or cygpath)
 if(WIN32)
-	include_directories(/mingw64/include/hidapi)
+	set(HIDAPI_INCLUDE_DIR "")
+	execute_process(
+		COMMAND pkg-config --cflags-only-I hidapi
+		OUTPUT_VARIABLE _hidapi_cflags
+		OUTPUT_STRIP_TRAILING_WHITESPACE
+		RESULT_VARIABLE _hidapi_rc
+		ERROR_QUIET
+	)
+	if(_hidapi_rc EQUAL 0 AND _hidapi_cflags)
+		string(REGEX REPLACE "^-I" "" HIDAPI_INCLUDE_DIR "${_hidapi_cflags}")
+		string(STRIP "${HIDAPI_INCLUDE_DIR}" HIDAPI_INCLUDE_DIR)
+	else()
+		execute_process(
+			COMMAND cygpath -m /mingw64/include/hidapi
+			OUTPUT_VARIABLE HIDAPI_INCLUDE_DIR
+			OUTPUT_STRIP_TRAILING_WHITESPACE
+			ERROR_QUIET
+		)
+	endif()
+	if(HIDAPI_INCLUDE_DIR)
+		include_directories(${HIDAPI_INCLUDE_DIR})
+		message(STATUS "hidapi include dir: ${HIDAPI_INCLUDE_DIR}")
+	endif()
 endif()
 
 if(STATIC_PKGDEPS_LIBS)
@@ -605,21 +627,37 @@ if(WIN32 AND NOT PKGDEPS_INCLUDE_DIRS)
 		list(APPEND DEPS_INCLUDE_DIRS ${LIBUSB_DIRS})
 	endif()
 
-	# hidapi
+	# hidapi (Windows: hidapi.pc; Linux: hidapi-hidraw / hidapi-libusb)
 	execute_process(
-		COMMAND pkg-config --cflags-only-I hidapi-hidraw hidapi-libusb
+		COMMAND pkg-config --cflags-only-I hidapi
 		OUTPUT_VARIABLE HIDAPI_FLAGS
 		OUTPUT_STRIP_TRAILING_WHITESPACE
 		RESULT_VARIABLE HIDAPI_RESULT
 		ERROR_QUIET
 	)
+	if(NOT HIDAPI_RESULT EQUAL 0 OR NOT HIDAPI_FLAGS)
+		execute_process(
+			COMMAND pkg-config --cflags-only-I hidapi-hidraw hidapi-libusb
+			OUTPUT_VARIABLE HIDAPI_FLAGS
+			OUTPUT_STRIP_TRAILING_WHITESPACE
+			RESULT_VARIABLE HIDAPI_RESULT
+			ERROR_QUIET
+		)
+	endif()
 	if(HIDAPI_RESULT EQUAL 0 AND HIDAPI_FLAGS)
 		string(REPLACE "-I" "" HIDAPI_DIRS "${HIDAPI_FLAGS}")
 		separate_arguments(HIDAPI_DIRS)
 		list(APPEND DEPS_INCLUDE_DIRS ${HIDAPI_DIRS})
 	else()
-		# MSYS2 MinGW: hidapi has no pkg-config, add include path directly
-		list(APPEND DEPS_INCLUDE_DIRS /mingw64/include/hidapi)
+		execute_process(
+			COMMAND cygpath -m /mingw64/include/hidapi
+			OUTPUT_VARIABLE HIDAPI_DIR
+			OUTPUT_STRIP_TRAILING_WHITESPACE
+			ERROR_QUIET
+		)
+		if(HIDAPI_DIR)
+			list(APPEND DEPS_INCLUDE_DIRS ${HIDAPI_DIR})
+		endif()
 	endif()
 
 	include_directories(${DEPS_INCLUDE_DIRS})

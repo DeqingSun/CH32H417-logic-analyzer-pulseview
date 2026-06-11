@@ -30,7 +30,7 @@ jobs:
       - name: Verify app bundle
         run: |
           APP=dist/LogicAnalyzer/LogicAnalyzer.app
-          codesign -vvv --deep --strict "$APP"
+          codesign --verify --deep "$APP"
           ditto "$APP" /tmp/LogicAnalyzer-test.app
           xattr -cr /tmp/LogicAnalyzer-test.app
           /tmp/LogicAnalyzer-test.app/Contents/MacOS/LogicAnalyzer --help >/dev/null

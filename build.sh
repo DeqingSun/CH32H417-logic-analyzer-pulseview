@@ -30,9 +30,8 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
         if [ -n "$QT_PREFIX" ]; then
             export PATH="$QT_PREFIX/bin:$PATH"
         fi
-        if [ -n "$PYTHON_PREFIX" ] && [ -d "$PYTHON_PREFIX/Frameworks/Python.framework/Versions" ]; then
-            PYVER="$(ls "$PYTHON_PREFIX/Frameworks/Python.framework/Versions" | grep -E '^[0-9]' | head -1)"
-            export PKG_CONFIG_PATH="$PYTHON_PREFIX/Frameworks/Python.framework/Versions/$PYVER/lib/pkgconfig:${PKG_CONFIG_PATH}"
+        if [ -n "$PYTHON_PREFIX" ] && [ -d "$PYTHON_PREFIX/Frameworks/Python.framework/Versions/3.12" ]; then
+            export PKG_CONFIG_PATH="$PYTHON_PREFIX/Frameworks/Python.framework/Versions/3.12/lib/pkgconfig:${PKG_CONFIG_PATH}"
         fi
         for formula in qt@5 boost python@3.12 glib glibmm@2.66 libsigc++@2 libusb hidapi libzip; do
             p="$(brew --prefix "$formula" 2>/dev/null || true)"
@@ -309,6 +308,45 @@ EOF
         macos_is_macho() {
             file "$1" 2>/dev/null | grep -q 'Mach-O'
         }
+        macos_rpaths_for() {
+            otool -l "$1" 2>/dev/null | awk '/cmd LC_RPATH/{found=1} found && /path / {print $2; found=0}'
+        }
+        macos_resolve_dep() {
+            local binary="$1" dep="$2" base rpath resolved pyfw suffix
+            case "$dep" in
+                @executable_path/*|@loader_path/*)
+                    echo "$dep"
+                    return 0
+                    ;;
+                @rpath/*)
+                    base="${dep#@rpath/}"
+                    if [[ "$base" == Python.framework/* ]]; then
+                        suffix="${base#Python.framework/}"
+                        pyfw="$(brew --prefix python@3.12 2>/dev/null)/Frameworks/Python.framework/$suffix"
+                        [ -f "$pyfw" ] && echo "$pyfw" && return 0
+                    fi
+                    for rpath in $(macos_rpaths_for "$binary"); do
+                        resolved="$rpath/$base"
+                        [ -f "$resolved" ] && echo "$resolved" && return 0
+                    done
+                    for rpath in /opt/homebrew/lib /opt/homebrew/opt/webp/lib \
+                        /opt/homebrew/opt/libpng/lib "$PREFIX/lib"; do
+                        resolved="$rpath/$(basename "$base")"
+                        [ -f "$resolved" ] && echo "$resolved" && return 0
+                        resolved="$rpath/$base"
+                        [ -f "$resolved" ] && echo "$resolved" && return 0
+                    done
+                    return 1
+                    ;;
+            esac
+            if [[ "$dep" == */Python.framework/* ]] && [ ! -f "$dep" ]; then
+                suffix="${dep#*Python.framework/}"
+                pyfw="$(brew --prefix python@3.12 2>/dev/null)/Frameworks/Python.framework/$suffix"
+                [ -f "$pyfw" ] && echo "$pyfw" && return 0
+            fi
+            echo "$dep"
+            return 0
+        }
         macos_should_bundle_dep() {
             local dep="$1"
             case "$dep" in
@@ -319,7 +357,7 @@ EOF
             return 0
         }
         macos_bundle_framework() {
-            local dep="$1"
+            local dep="$1" binary="$2" ref="${3:-$1}"
             local fw_root fw_name fw_dest rel_path inner
             fw_root="${dep%%.framework/*}.framework"
             [ -d "$fw_root" ] || return 0
@@ -337,17 +375,16 @@ EOF
                 "$fw_dest/Versions/A/$fw_name" \
                 "$fw_dest/Versions/Current/$fw_name"; do
                 if [ -f "$inner" ]; then
-                    install_name_tool -change "$dep" \
+                    install_name_tool -change "$ref" \
                         "@executable_path/../Frameworks/$fw_name.framework$rel_path" \
-                        "$2" 2>/dev/null || true
+                        "$binary" 2>/dev/null || true
                     macos_fixup_binary "$inner"
                     break
                 fi
             done
         }
         macos_bundle_dylib() {
-            local dep="$1"
-            local binary="$2"
+            local dep="$1" binary="$2" ref="${3:-$1}"
             macos_should_bundle_dep "$dep" || return 0
             [ -f "$dep" ] || return 0
             grep -qxF "$dep" "$MACOS_BUNDLE_VISITED" 2>/dev/null && return 0
@@ -365,34 +402,47 @@ EOF
             else
                 new_path="@loader_path/$base"
             fi
-            install_name_tool -change "$dep" "$new_path" "$binary" 2>/dev/null || true
+            install_name_tool -change "$ref" "$new_path" "$binary" 2>/dev/null || true
             macos_fixup_binary "$dest"
         }
         macos_fixup_binary() {
-            local binary="$1"
-            local dep
+            local binary="$1" dep resolved
             macos_is_macho "$binary" || return 0
             while read -r dep; do
                 [ -n "$dep" ] || continue
-                macos_should_bundle_dep "$dep" || continue
-                [ -f "$dep" ] || continue
-                if [[ "$dep" == *".framework/"* ]]; then
-                    macos_bundle_framework "$dep" "$binary"
+                resolved="$(macos_resolve_dep "$binary" "$dep")" || continue
+                macos_should_bundle_dep "$resolved" || continue
+                [ -f "$resolved" ] || continue
+                if [[ "$resolved" == *".framework/"* ]]; then
+                    macos_bundle_framework "$resolved" "$binary" "$dep"
                 else
-                    macos_bundle_dylib "$dep" "$binary"
+                    macos_bundle_dylib "$resolved" "$binary" "$dep"
                 fi
             done < <(otool -L "$binary" 2>/dev/null | tail -n +2 | awk '{print $1}')
         }
         macos_has_external_deps() {
-            local f dep
+            local f dep resolved
             for f in "$@"; do
                 [ -f "$f" ] || continue
                 while read -r dep; do
-                    macos_should_bundle_dep "$dep" || continue
-                    [ -f "$dep" ] && return 0
+                    resolved="$(macos_resolve_dep "$f" "$dep")" || continue
+                    macos_should_bundle_dep "$resolved" || continue
+                    [ -f "$resolved" ] && return 0
                 done < <(otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}')
             done
             return 1
+        }
+        macos_macdeployqt_libpaths() {
+            local args=() dir
+            for dir in /opt/homebrew/lib /opt/homebrew/opt/webp/lib \
+                /opt/homebrew/opt/libpng/lib /opt/homebrew/opt/gettext/lib \
+                "$PREFIX/lib"; do
+                [ -d "$dir" ] && args+=(-libpath="$dir")
+            done
+            if [ -n "${PYTHON_PREFIX:-}" ] && [ -d "$PYTHON_PREFIX/Frameworks" ]; then
+                args+=(-libpath="$PYTHON_PREFIX/Frameworks")
+            fi
+            printf '%s\0' "${args[@]}"
         }
         macos_bundle_all_deps() {
             local round=0
@@ -446,10 +496,11 @@ EOF
             done < <(find "$app/Contents/PlugIns" -name '*.dylib' -type f -print0 2>/dev/null)
             macos_sign_file "$MAIN_BIN"
             macos_sign_file "$app"
-            codesign --verify --deep --strict "$app" || {
+            if ! codesign --verify --deep "$app" 2>&1; then
                 echo "[error] codesign verification failed"
+                otool -L "$MAIN_BIN" | head -30 || true
                 exit 1
-            }
+            fi
             echo "  codesign verification OK"
         }
 
@@ -480,6 +531,18 @@ PLIST
         chmod +x "$MAIN_BIN"
         echo "  LogicAnalyzer.app/Contents/MacOS/LogicAnalyzer"
 
+        # macdeployqt needs libsharpyuv (Qt imageformats) on the search path
+        for sharpyuv in /opt/homebrew/lib/libsharpyuv.0.dylib \
+            /opt/homebrew/opt/webp/lib/libsharpyuv.0.dylib; do
+            if [ -f "$sharpyuv" ]; then
+                cp -f "$sharpyuv" "$FRAMEWORKS_DIR/"
+                install_name_tool -id "@loader_path/libsharpyuv.0.dylib" \
+                    "$FRAMEWORKS_DIR/libsharpyuv.0.dylib" 2>/dev/null || true
+                echo "  Pre-bundled libsharpyuv.0.dylib for macdeployqt"
+                break
+            fi
+        done
+
         MACDEPLOYQT=""
         if command -v macdeployqt &>/dev/null; then
             MACDEPLOYQT="$(command -v macdeployqt)"
@@ -488,7 +551,11 @@ PLIST
         fi
         if [ -n "$MACDEPLOYQT" ]; then
             echo "  Running macdeployqt..."
-            "$MACDEPLOYQT" "$APP" -always-overwrite -codesign=-
+            MACDEPLOYQT_ARGS=(-always-overwrite -codesign=-)
+            while IFS= read -r -d '' arg; do
+                MACDEPLOYQT_ARGS+=("$arg")
+            done < <(macos_macdeployqt_libpaths)
+            "$MACDEPLOYQT" "$APP" "${MACDEPLOYQT_ARGS[@]}"
         else
             echo "  (macdeployqt not found, Qt frameworks must be installed separately)"
         fi

@@ -36,8 +36,12 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
             PYVER="$(ls "$PYTHON_PREFIX/Frameworks/Python.framework/Versions" | grep -E '^[0-9]' | head -1)"
             export PKG_CONFIG_PATH="$PYTHON_PREFIX/Frameworks/Python.framework/Versions/$PYVER/lib/pkgconfig:${PKG_CONFIG_PATH}"
         fi
-        for p in "$QT_PREFIX" "$BOOST_PREFIX"; do
+        for p in "$QT_PREFIX" "$BOOST_PREFIX" "$(brew --prefix glib 2>/dev/null)" "$(brew --prefix libusb 2>/dev/null)"; do
             [ -n "$p" ] && export CMAKE_PREFIX_PATH="${p}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+            [ -n "$p" ] && [ -d "$p/lib" ] && export LDFLAGS="-L$p/lib ${LDFLAGS}"
+        done
+        for p in "$QT_PREFIX" "$(brew --prefix glib 2>/dev/null)" "$(brew --prefix libusb 2>/dev/null)"; do
+            [ -n "$p" ] && [ -d "$p/lib/pkgconfig" ] && export PKG_CONFIG_PATH="$p/lib/pkgconfig:${PKG_CONFIG_PATH}"
         done
     fi
 fi

@@ -289,18 +289,18 @@ set(LIBSIGROK_SOURCES
 add_library(sigrok SHARED ${LIBSIGROK_SOURCES})
 
 target_link_libraries(sigrok
-    ${GLIB_LIBRARIES}
+    ${GLIB_LDFLAGS}
     ${PLATFORM_LIBS}
 )
 
 if(LIBUSB_FOUND)
-    target_link_libraries(sigrok ${LIBUSB_LIBRARIES})
+    target_link_libraries(sigrok ${LIBUSB_LDFLAGS})
 endif()
 if(LIBSERIALPORT_FOUND)
-    target_link_libraries(sigrok ${LIBSERIALPORT_LIBRARIES})
+    target_link_libraries(sigrok ${LIBSERIALPORT_LDFLAGS})
 endif()
 if(LIBZIP_FOUND)
-    target_link_libraries(sigrok ${LIBZIP_LIBRARIES})
+    target_link_libraries(sigrok ${LIBZIP_LDFLAGS})
 endif()
 
 # Set output name to match pkg-config expectation

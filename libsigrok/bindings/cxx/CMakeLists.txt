@@ -69,8 +69,8 @@ add_library(sigrokcxx SHARED ${LIBSIGROKCXX_SOURCES})
 
 target_link_libraries(sigrokcxx
     ${SIGROK_LIBS}
-    ${GLIBMM_LIBRARIES}
-    ${GLIB_LIBRARIES}
+    ${GLIBMM_LDFLAGS}
+    ${GLIB_LDFLAGS}
 )
 
 # Ensure linker can find our installed libsigrok

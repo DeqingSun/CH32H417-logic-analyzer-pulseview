@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdarg>
+#include <climits>
 #include <cstdint>
 #include <iterator>
 
@@ -61,6 +62,14 @@
 #include "views/trace/standardbar.hpp"
 #include <fstream>
 #include <QGuiApplication>
+
+#ifdef _WIN32
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#else
+#include <sys/sysinfo.h>
+#endif
 
 using namespace std;
 using namespace pv::util;
@@ -98,11 +107,32 @@ MainWindow::MainWindow(QWidget *parent) :
 
 bool MainWindow::checkSystemRequirements()
 {
-	int memFree;
+	int memFree = INT_MAX;
+
+#ifdef _WIN32
 	MEMORYSTATUSEX statex;
-	statex.dwLength = sizeof (statex);
+	statex.dwLength = sizeof(statex);
 	GlobalMemoryStatusEx(&statex);
-	memFree = statex.ullAvailPhys * 1.0 / GB;
+	memFree = statex.ullAvailPhys / GB;
+#elif defined(__APPLE__)
+	vm_size_t page_size;
+	if (host_page_size(mach_host_self(), &page_size) == KERN_SUCCESS) {
+		vm_statistics64_data_t vmstat;
+		mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+		if (host_statistics64(mach_host_self(), HOST_VM_INFO64,
+		    (host_info64_t)&vmstat, &count) == KERN_SUCCESS) {
+			const uint64_t free_mem =
+				(vmstat.free_count + vmstat.inactive_count) *
+				(uint64_t)page_size;
+			memFree = free_mem / GB;
+		}
+	}
+#else
+	struct sysinfo si;
+	if (sysinfo(&si) == 0)
+		memFree = si.freeram / GB;
+#endif
+
 	if (memFree < 4){
 		QDialog dialog(nullptr);
 		dialog.setWindowTitle(tr("提示"));

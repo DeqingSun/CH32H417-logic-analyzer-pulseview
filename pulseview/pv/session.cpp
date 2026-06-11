@@ -57,7 +57,7 @@
 #include "views/trace/logicsignal.hpp"
 #include "views/trace/signal.hpp"
 #include "views/trace/view.hpp"
-#include <libusb-1.0/libusb.h>
+#include <libusb.h>
 #include <libsigrokcxx/libsigrokcxx.hpp>
 #include <fstream>
 using namespace std;
